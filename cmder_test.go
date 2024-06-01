@@ -96,6 +96,9 @@ func TestCommand_Run(t *testing.T) {
 					if result.Err == nil {
 						return errors.New("expected error")
 					}
+					if errors.Is(result.Err, context.DeadlineExceeded) {
+						return errors.New("expected error to be different from context.DeadlineExceeded")
+					}
 					if result.Attempts != 1 {
 						return fmt.Errorf("expected 1 attempt, got %d", result.Attempts)
 					}
