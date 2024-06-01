@@ -5,7 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/GiGurra/cmder/internal/util_ctx"
+	"github.com/GiGurra/cmder/internal/util"
 	"io"
 	"log/slog"
 	"os"
@@ -198,7 +198,7 @@ func (c Spec) Run(ctx context.Context) (Result, error) {
 		cmd.Stdin = c.StdIn
 
 		// create a writer that writes to buffer, but also sends a signal to reset the timeout
-		combinedWriter := util_ctx.NewResetWriterCh(combinedBuffer, aliveSignal)
+		combinedWriter := util.NewResetWriterCh(combinedBuffer, aliveSignal)
 
 		if c.CollectAllOutput {
 			stdoutBuffer = &bytes.Buffer{}
