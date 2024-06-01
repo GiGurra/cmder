@@ -221,9 +221,11 @@ func (c Spec) Run(ctx context.Context) Result {
 		// create a writer that writes to buffer, but also sends a signal to reset the timeout
 		observer := util.NewObserver(aliveSignal)
 
+		// The observer is used to reset the attempt timeout, when used
 		stdOutTargets := []io.Writer{observer}
 		stdErrTargets := []io.Writer{observer}
 
+		// If we are collecting all output, we need to write to the corresponding buffers
 		if c.CollectAllOutput {
 			stdoutBuffer = &bytes.Buffer{}
 			stderrBuffer = &bytes.Buffer{}
@@ -232,14 +234,15 @@ func (c Spec) Run(ctx context.Context) Result {
 			stdErrTargets = append(stdErrTargets, stderrBuffer, combinedBuffer)
 		}
 
+		// If we are capturing output, we need to write to the corresponding writers
 		if c.StdOut != nil {
 			stdOutTargets = append(stdOutTargets, c.StdOut)
 		}
-
 		if c.StdErr != nil {
 			stdErrTargets = append(stdErrTargets, c.StdErr)
 		}
 
+		// Set the writers
 		cmd.Stdout = io.MultiWriter(stdOutTargets...)
 		cmd.Stderr = io.MultiWriter(stdErrTargets...)
 
