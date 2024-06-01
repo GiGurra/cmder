@@ -7,44 +7,49 @@ import (
 	"fmt"
 	"github.com/GiGurra/cmder/internal/util_ctx"
 	"io"
+	"log/slog"
 	"os"
 	"os/exec"
 	"strings"
 	"time"
 )
 
-type Command struct {
-	Cwd  string
+type Spec struct {
+
+	// Minimum input
 	App  string
 	Args []string
-	// You can have either a custom context or a timeout, not both
-	Timeout        time.Duration
-	TimeoutRetries int
-	LogStdOut      bool
-	LogStdErr      bool
+
+	// Extra options
+	Cwd                         string
+	AttemptTimeout              time.Duration
+	TotalTimeout                time.Duration
+	ResetAttemptTimeoutOnOutput bool
+	Retries                     int
+	RetryFilter                 func(err error, isTimeout bool) bool
+
+	// Input/Output
+	StdIn  io.Reader
+	StdOut io.Writer // if capturing output while running
+	StdErr io.Writer // if capturing output while running
+
 	// debug functionality
-	LogInput bool
-	StdIn    io.Reader
+	Verbose bool
 }
 
-type CommandResult struct {
+type Result struct {
 	StdOut   string
 	StdErr   string
 	Combined string
 	Err      error
 	Attempts int
+	Code     int
 }
 
-func defaultTimeout() time.Duration {
-	return 5 * time.Minute
-}
+func New(appAndArgs ...string) Spec {
 
-func NewCommand(appAndArgs ...string) Command {
-
-	result := Command{
-		Cwd:     ".",
-		Timeout: defaultTimeout(),
-		StdIn:   os.Stdin,
+	result := Spec{
+		RetryFilter: DefaultRetryFilter,
 	}
 
 	if len(appAndArgs) > 0 {
@@ -59,59 +64,104 @@ func NewCommand(appAndArgs ...string) Command {
 }
 
 //goland:noinspection GoUnusedExportedFunction
-func NewCommandA(app string, args ...string) Command {
-	result := Command{
-		Cwd:     ".",
-		App:     app,
-		Args:    args,
-		Timeout: defaultTimeout(),
-		StdIn:   os.Stdin,
-	}
-	return result
+func NewA(app string, args ...string) Spec {
+	return New(append([]string{app}, args...)...)
 }
 
-func (c Command) WithCwd(cwd string) Command {
+func DefaultRetryFilter(err error, isTimeout bool) bool {
+	return TimeoutRetryFilter(err, isTimeout)
+}
+
+// TimeoutRetryFilter is a simple retry policy that retries on timeouts only
+func TimeoutRetryFilter(err error, isTimeout bool) bool {
+
+	if errors.Is(err, context.DeadlineExceeded) {
+		slog.Warn("timeout (go context.DeadlineExceeded) running command")
+		return true
+	}
+
+	if strings.Contains(err.Error(), "context deadline exceeded") {
+		slog.Warn("timeout ('context deadline exceeded') running command")
+		return true
+	}
+
+	if isTimeout {
+		slog.Warn("timeout running command")
+		return true
+	}
+
+	return false
+}
+
+// WithTotalTimeout sets the total timeout for the command including retries
+func (c Spec) WithTotalTimeout(timeout time.Duration) Spec {
+	c.TotalTimeout = timeout
+	return c
+}
+
+// WithResetAttemptTimeoutOnOutput resets the timeout if output is received from the command
+func (c Spec) WithResetAttemptTimeoutOnOutput(enabled bool) Spec {
+	c.ResetAttemptTimeoutOnOutput = enabled
+	return c
+}
+
+// WithWD sets the working directory for the command
+func (c Spec) WithWD(cwd string) Spec {
 	c.Cwd = cwd
 	return c
 }
 
-func (c Command) WithStdIn(reader io.Reader) Command {
+// WithStdIn sets the standard input for the command
+func (c Spec) WithStdIn(reader io.Reader) Spec {
 	c.StdIn = reader
 	return c
 }
 
-func (c Command) WithApp(app string, args ...string) Command {
+// WithApp sets the application to run
+func (c Spec) WithApp(app string) Spec {
 	c.App = app
-	c.Args = args
 	return c
 }
 
-func (c Command) WithExtraArgs(args ...string) Command {
-	c.Args = append(c.Args, args...)
+// WithArgs sets the arguments for the command
+func (c Spec) WithArgs(newArgs ...string) Spec {
+	c.Args = newArgs
 	return c
 }
 
-func (c Command) WithTimeoutRetries(n int) Command {
-	c.TimeoutRetries = n
+// WithExtraArgs appends the arguments to the command
+func (c Spec) WithExtraArgs(extraArgs ...string) Spec {
+	c.Args = append(c.Args, extraArgs...)
 	return c
 }
 
-func (c Command) WithDebugLogging(args ...bool) Command {
-	if len(args) > 0 {
-		c.LogInput = args[0]
-	} else {
-		c.LogInput = true
-	}
+// WithRetryFilter sets the retry filter
+func (c Spec) WithRetryFilter(filter func(err error, isTimeout bool) bool) Spec {
+	c.RetryFilter = filter
 	return c
 }
 
-func (c Command) WithTimeout(timeout time.Duration) Command {
-	c.Timeout = timeout
+// WithRetries sets the number of retries before giving up
+func (c Spec) WithRetries(n int) Spec {
+	c.Retries = n
 	return c
 }
 
-func (c Command) logBeforeRun() {
-	if c.LogInput {
+// WithVerbose sets the verbose flag
+func (c Spec) WithVerbose(verbose bool) Spec {
+	c.Verbose = verbose
+	return c
+}
+
+// WithAttemptTimeout sets the timeout for the command
+// This is the total time the command can run, per attempt
+func (c Spec) WithAttemptTimeout(timeout time.Duration) Spec {
+	c.AttemptTimeout = timeout
+	return c
+}
+
+func (c Spec) logBeforeRun() {
+	if c.Verbose {
 		if c.App == "sh" && len(c.Args) > 0 && c.Args[0] == "-c" {
 			fmt.Printf("%s$ %s\n", c.Cwd, strings.Join(c.Args[1:], " "))
 		} else {
@@ -120,23 +170,23 @@ func (c Command) logBeforeRun() {
 	}
 }
 
-func (c Command) WithStdLogging() Command {
-	c.LogStdErr = true
-	c.LogStdOut = true
+func (c Spec) WithStdOutErrForwarded() Spec {
+	c.StdOut = os.Stdout
+	c.StdErr = os.Stderr
 	return c
 }
 
-func (c Command) WithStdErrLogging() Command {
-	c.LogStdErr = true
+func (c Spec) WithStdOutForwarded() Spec {
+	c.StdOut = os.Stdout
 	return c
 }
 
-func (c Command) WithStdOutLogging() Command {
-	c.LogStdOut = true
+func (c Spec) WithStdErrForwarded() Spec {
+	c.StdErr = os.Stderr
 	return c
 }
 
-func (c Command) Run(ctx context.Context) (CommandResult, error) {
+func (c Spec) Run(ctx context.Context) (Result, error) {
 
 	stdoutBuffer := &bytes.Buffer{}
 	stderrBuffer := &bytes.Buffer{}
@@ -158,13 +208,13 @@ func (c Command) Run(ctx context.Context) (CommandResult, error) {
 		combinedWriter := util_ctx.NewResetWriterCh(combinedBuffer, resetChan)
 
 		cmd.Stdin = c.StdIn
-		if c.LogStdOut {
-			cmd.Stdout = io.MultiWriter(os.Stdout, stdoutBuffer, combinedWriter)
+		if c.StdOut != nil {
+			cmd.Stdout = io.MultiWriter(c.StdOut, stdoutBuffer, combinedWriter)
 		} else {
 			cmd.Stdout = io.MultiWriter(stdoutBuffer, combinedWriter)
 		}
-		if c.LogStdErr {
-			cmd.Stderr = io.MultiWriter(os.Stderr, stderrBuffer, combinedWriter)
+		if c.StdErr != nil {
+			cmd.Stderr = io.MultiWriter(c.StdErr, stderrBuffer, combinedWriter)
 		} else {
 			cmd.Stderr = io.MultiWriter(stderrBuffer, combinedWriter)
 		}
@@ -176,7 +226,7 @@ func (c Command) Run(ctx context.Context) (CommandResult, error) {
 	stderr := stderrBuffer.String()
 	combined := combinedBuffer.String()
 
-	return CommandResult{
+	return Result{
 		StdOut:   stdout,
 		StdErr:   stderr,
 		Combined: combined,
@@ -185,31 +235,43 @@ func (c Command) Run(ctx context.Context) (CommandResult, error) {
 	}, err
 }
 
-func (c Command) withRetries(ctx context.Context, recvSignal <-chan any, processor func(cmd *exec.Cmd) error) error {
+func (c Spec) withRetries(srcCtx context.Context, recvSignal <-chan any, processor func(cmd *exec.Cmd) error) error {
 
 	c.logBeforeRun()
 
-	for i := 0; i <= c.TimeoutRetries; i++ {
+	ctx := srcCtx // needed so we don't cancel the parent context
+
+	if c.TotalTimeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, c.TotalTimeout)
+		defer cancel() // os effectively called after processor(cmd)
+	}
+
+	for i := 0; i <= c.Retries; i++ {
 
 		ctx := ctx // needed so we don't cancel the parent context
 
 		// Every retry needs its own timeout context
+		isTimeout := false
 		err := func() error {
-			if c.Timeout > 0 {
+			if c.AttemptTimeout > 0 {
 				var cancel context.CancelFunc
 				var resetTimeout util_ctx.ResetFunc
-				ctx, cancel, resetTimeout = util_ctx.WithTimeoutAndReset(ctx, c.Timeout)
+				ctx, cancel, resetTimeout = util_ctx.WithTimeoutAndReset(ctx, c.AttemptTimeout)
 				defer cancel() // os effectively called after processor(cmd)
 				go func() {
 					for {
 						select {
 						case <-ctx.Done():
+							isTimeout = true
 							return
 						case _, ok := <-recvSignal:
 							if !ok {
 								return
 							}
-							resetTimeout()
+							if c.ResetAttemptTimeoutOnOutput {
+								resetTimeout()
+							}
 						}
 					}
 				}()
@@ -230,35 +292,24 @@ func (c Command) withRetries(ctx context.Context, recvSignal <-chan any, process
 			cmd.Dir = c.Cwd
 
 			return processor(cmd)
+
 		}()
+
+		// Check if context is timed out
 
 		if err != nil {
 
-			if errors.Is(err, context.DeadlineExceeded) {
-				fmt.Printf("timeout (go context.DeadlineExceeded) running util_cmd for %s, attempt %d/%d \n", c.App, i+1, c.TimeoutRetries+1)
+			if c.RetryFilter(err, isTimeout) {
+				slog.Warn(fmt.Sprintf("retrying %s, attempt %d/%d \n", c.App, i+1, c.Retries+1))
 				continue
+			} else {
+				return fmt.Errorf("error running cmd %s \n %s: %w", c.App, err.Error(), err)
 			}
-
-			if strings.Contains(err.Error(), "signal: killed") {
-				fmt.Printf("timeout (signal: killed) running util_cmd for %s, attempt %d/%d \n", c.App, i+1, c.TimeoutRetries+1)
-				continue
-			}
-
-			if strings.Contains(err.Error(), "request returned non-2xx status, 504") {
-				fmt.Printf("timeout (http 504 from fly.io) running util_cmd for %s, attempt %d/%d \n", c.App, i+1, c.TimeoutRetries+1)
-				continue
-			}
-
-			if strings.Contains(err.Error(), "context deadline exceeded") {
-				fmt.Printf("timeout (context deadline exceeded) running util_cmd for %s, attempt %d/%d \n", c.App, i+1, c.TimeoutRetries+1)
-				continue
-			}
-
-			return fmt.Errorf("error running util_cmd %s \n %s: %w", c.App, err.Error(), err)
 		}
 
 		return nil
 
 	}
-	return fmt.Errorf("error running util_cmd %s \n %s: %w", c.App, "timeout", context.DeadlineExceeded)
+
+	return fmt.Errorf("error running cmd %s \n %s: %w", c.App, "timeout", context.DeadlineExceeded)
 }

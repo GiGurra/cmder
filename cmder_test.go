@@ -33,14 +33,14 @@ func NewCheck[T any](name string, apply func(t T) error) Check[T] {
 	}
 }
 
-var errorIsNilCheck = NewCheck[CommandResult]("error is nil", func(result CommandResult) error {
+var errorIsNilCheck = NewCheck[Result]("error is nil", func(result Result) error {
 	if result.Err != nil {
 		return fmt.Errorf("expected no error, got %v", result.Err)
 	}
 	return nil
 })
 
-var stdOutNonEmptyCheck = NewCheck[CommandResult]("StdOut not empty", func(result CommandResult) error {
+var stdOutNonEmptyCheck = NewCheck[Result]("StdOut not empty", func(result Result) error {
 	if result.StdOut == "" {
 		return errors.New("empty StdOut")
 	}
@@ -50,19 +50,19 @@ var stdOutNonEmptyCheck = NewCheck[CommandResult]("StdOut not empty", func(resul
 func TestCommand_Run(t *testing.T) {
 	tests := []struct {
 		name   string
-		cmd    Command
-		checks []Check[CommandResult]
+		cmd    Spec
+		checks []Check[Result]
 	}{
 		{
 			name:   "simple ls command",
-			cmd:    NewCommand("ls", "-la").WithTimeout(5 * time.Second),
-			checks: []Check[CommandResult]{errorIsNilCheck, stdOutNonEmptyCheck},
+			cmd:    New("ls", "-la").WithAttemptTimeout(5 * time.Second),
+			checks: []Check[Result]{errorIsNilCheck, stdOutNonEmptyCheck},
 		},
 		{
 			name: "timing out command",
-			cmd:  NewCommand("sleep", "10").WithTimeout(1 * time.Second),
-			checks: []Check[CommandResult]{
-				NewCheck[CommandResult]("error is context.DeadlineExceeded", func(result CommandResult) error {
+			cmd:  New("sleep", "10").WithAttemptTimeout(1 * time.Second).WithRetries(4).WithVerbose(true),
+			checks: []Check[Result]{
+				NewCheck[Result]("error is context.DeadlineExceeded", func(result Result) error {
 					if result.Err == nil {
 						return errors.New("expected error")
 					}
@@ -75,8 +75,8 @@ func TestCommand_Run(t *testing.T) {
 		},
 		{
 			name:   "command writing output every second for 4 seconds does not time out",
-			cmd:    NewCommand("bash", "-c", "for i in {1..4}; do echo $i; sleep 1; done").WithTimeout(2 * time.Second),
-			checks: []Check[CommandResult]{errorIsNilCheck, stdOutNonEmptyCheck},
+			cmd:    New("bash", "-c", "for i in {1..4}; do echo $i; sleep 1; done").WithAttemptTimeout(2 * time.Second).WithResetAttemptTimeoutOnOutput(true),
+			checks: []Check[Result]{errorIsNilCheck, stdOutNonEmptyCheck},
 		},
 	}
 
@@ -87,7 +87,7 @@ func TestCommand_Run(t *testing.T) {
 			for _, check := range tt.checks {
 				fmt.Printf(" - Running check '%v'...", check.Name())
 				if err := check.Apply(cmdResult); err != nil {
-					t.Errorf("Command.Run() check '%v' failed: %v", check.Name(), err)
+					t.Errorf("Spec.Run() check '%v' failed: %v", check.Name(), err)
 				}
 				fmt.Printf("OK \n")
 			}
