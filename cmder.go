@@ -210,7 +210,7 @@ func (c Spec) Run(ctx context.Context) Result {
 	attempts := 0
 	exitCode := 0
 
-	err := c.withRetries(ctx, func(cmd *exec.Cmd, aliveSignal chan any) error {
+	err := c.withRetries(ctx, func(cmd *exec.Cmd, aliveChannel chan any) error {
 
 		exitCode = 0
 
@@ -219,11 +219,11 @@ func (c Spec) Run(ctx context.Context) Result {
 		cmd.Stdin = c.StdIn
 
 		// create a writer that writes to buffer, but also sends a signal to reset the timeout
-		observer := util.NewObserver(aliveSignal)
+		sfw := util.NewSignalForwarderWriter(aliveChannel)
 
-		// The observer is used to reset the attempt timeout, when used
-		stdOutTargets := []io.Writer{observer}
-		stdErrTargets := []io.Writer{observer}
+		// The sfw is used to reset the attempt timeout, when used
+		stdOutTargets := []io.Writer{sfw}
+		stdErrTargets := []io.Writer{sfw}
 
 		// If we are collecting all output, we need to write to the corresponding buffers
 		if c.CollectAllOutput {

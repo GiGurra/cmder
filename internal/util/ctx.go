@@ -4,21 +4,21 @@ import (
 	"io"
 )
 
-type _observer struct {
+type _sfw struct {
 	fn func()
 }
 
-func (rw _observer) Write(p []byte) (n int, err error) {
+func (rw _sfw) Write(p []byte) (n int, err error) {
 	rw.fn()
 	return len(p), nil
 }
 
-func newObserver(fn func()) io.Writer {
-	return _observer{
+func newSFW(fn func()) io.Writer {
+	return _sfw{
 		fn: fn,
 	}
 }
 
-func NewObserver(ch chan any) io.Writer {
-	return newObserver(func() { ch <- struct{}{} })
+func NewSignalForwarderWriter(ch chan any) io.Writer {
+	return newSFW(func() { ch <- struct{}{} })
 }

@@ -9,7 +9,7 @@ import (
 func TestTapWriterToChan(t *testing.T) {
 	sink := bytes.Buffer{}
 	tap := make(chan any, 10)
-	obs := NewObserver(tap)
+	obs := NewSignalForwarderWriter(tap)
 	combined := io.MultiWriter(&sink, obs)
 
 	_, _ = combined.Write([]byte("hello"))
