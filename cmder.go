@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -190,18 +191,14 @@ func (c Spec) Run(ctx context.Context) (Result, error) {
 	combinedBuffer := &bytes.Buffer{}
 	attempts := 0
 
-	// This channel is used to signal that the timeout should be reset
-	resetChan := make(chan any, 1)
-	defer close(resetChan)
-
-	err := c.withRetries(ctx, resetChan, func(cmd *exec.Cmd) error {
+	err := c.withRetries(ctx, func(cmd *exec.Cmd, aliveSignal chan any) error {
 
 		// Reset these each time, because they could internally
 		attempts++
 		cmd.Stdin = c.StdIn
 
 		// create a writer that writes to buffer, but also sends a signal to reset the timeout
-		combinedWriter := util_ctx.NewResetWriterCh(combinedBuffer, resetChan)
+		combinedWriter := util_ctx.NewResetWriterCh(combinedBuffer, aliveSignal)
 
 		if c.CollectAllOutput {
 			stdoutBuffer = &bytes.Buffer{}
@@ -247,82 +244,92 @@ func (c Spec) Run(ctx context.Context) (Result, error) {
 	}, err
 }
 
-func (c Spec) withRetries(srcCtx context.Context, recvSignal <-chan any, processor func(cmd *exec.Cmd) error) error {
+func executeAfterDuration(ctx context.Context, duration time.Duration, task func()) {
+	select {
+	case <-time.After(duration):
+		task()
+	case <-ctx.Done():
+	}
+}
+
+func toPtr[T any](x T) *T {
+	return &x
+}
+
+func (c Spec) withRetries(parentCtx context.Context, processor func(cmd *exec.Cmd, aliveSignal chan any) error) error {
 
 	c.logBeforeRun()
 
-	ctx := srcCtx // needed so we don't cancel the parent context
+	jobCtx, cancelJobCtx := context.WithCancel(parentCtx)
+	defer cancelJobCtx()
+
+	jobTimedOut := atomic.Bool{}
 
 	if c.TotalTimeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, c.TotalTimeout)
-		defer cancel() // os effectively called after processor(cmd)
+		executeAfterDuration(jobCtx, c.TotalTimeout, func() {
+			jobTimedOut.Store(true)
+			cancelJobCtx()
+		})
 	}
-
-	// TODO: We have race conditions below. Need to rewrite timeout handling entirely. Should be a single WithTimeout, with its own context.
-	// When that context times out, we must check if we really want to time out given the overall external conditions (atomics!)
-	// So no more race conditions
 
 	for i := 0; i <= c.Retries; i++ {
 
-		ctx := ctx // needed so we don't cancel the parent context
+		attemptTimedOut := atomic.Bool{}
+		attemptDeadline := atomic.Pointer[time.Time]{}
+		attemptDeadline.Store(toPtr(time.Now().Add(c.AttemptTimeout)))
 
-		// Every retry needs its own timeout context
-		isAttemptTimeout := false
 		err := func() error {
-			if c.AttemptTimeout > 0 {
-				var cancel context.CancelFunc
-				var resetTimeout util_ctx.ResetFunc
-				ctx, cancel, resetTimeout = util_ctx.WithTimeoutAndReset(ctx, c.AttemptTimeout)
-				defer cancel() // os effectively called after processor(cmd)
-				go func() {
-					for {
-						select {
-						case <-ctx.Done():
-							time.Sleep(1 * time.Second)
-							isAttemptTimeout = true
-							return
-						case _, ok := <-recvSignal:
-							if !ok {
-								return
-							}
-							if c.ResetAttemptTimeoutOnOutput {
-								resetTimeout()
-							}
-						}
-					}
-				}()
-			} else {
-				go func() {
-					for {
-						select {
-						case _, ok := <-recvSignal:
-							if !ok {
-								return
-							}
-						}
-					}
-				}()
-			}
 
-			cmd := exec.CommandContext(ctx, c.App, c.Args...)
+			aliveSignal := make(chan any, 10)
+			defer close(aliveSignal)
+
+			attemptCtx, cancelAttemptCtx := context.WithCancel(jobCtx)
+			defer cancelAttemptCtx()
+
+			executeAfterDuration(attemptCtx, c.AttemptTimeout, func() {
+				curDeadline := attemptDeadline.Load()
+				if time.Now().After(*curDeadline) {
+					attemptTimedOut.Store(true)
+					cancelAttemptCtx()
+				} else {
+					executeAfterDuration(attemptCtx, curDeadline.Sub(time.Now())+1*time.Millisecond, func() {
+						cancelAttemptCtx()
+					})
+				}
+			})
+
+			go func() {
+				for {
+					select {
+					case <-aliveSignal:
+						if c.ResetAttemptTimeoutOnOutput {
+							attemptDeadline.Store(toPtr(time.Now().Add(c.AttemptTimeout)))
+						}
+					case <-attemptCtx.Done():
+						return
+					}
+				}
+			}()
+
+			cmd := exec.CommandContext(attemptCtx, c.App, c.Args...)
 			cmd.Dir = c.Cwd
 
-			return processor(cmd)
+			return processor(cmd, aliveSignal)
 
 		}()
 
-		// Check if context is timed out
-
 		if err != nil {
-
-			if c.RetryFilter(err, isAttemptTimeout) {
+			if c.RetryFilter(err, attemptTimedOut.Load()) {
 				if c.Verbose {
 					slog.Warn(fmt.Sprintf("retrying %s, attempt %d/%d \n", c.App, i+1, c.Retries+1))
 				}
 				continue
 			} else {
-				return fmt.Errorf("error running cmd %s \n %s: %w", c.App, err.Error(), err)
+				if jobTimedOut.Load() {
+					return fmt.Errorf("error running cmd %s \n %s: %w", c.App, "timeout", context.DeadlineExceeded)
+				} else {
+					return fmt.Errorf("error running cmd %s \n %s: %w", c.App, err.Error(), err)
+				}
 			}
 		}
 
