@@ -95,6 +95,18 @@ func (c Spec) WithTotalTimeout(timeout time.Duration) Spec {
 	return c
 }
 
+// WithStdOut sets the standard output for the command
+func (c Spec) WithStdOut(writer io.Writer) Spec {
+	c.StdOut = writer
+	return c
+}
+
+// WithStdErr sets the standard error for the command
+func (c Spec) WithStdErr(writer io.Writer) Spec {
+	c.StdErr = writer
+	return c
+}
+
 // WithResetAttemptTimeoutOnOutput resets the timeout if output is received from the command
 func (c Spec) WithResetAttemptTimeoutOnOutput(enabled bool) Spec {
 	c.ResetAttemptTimeoutOnOutput = enabled
