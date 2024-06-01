@@ -22,7 +22,7 @@ type Spec struct {
 	Args []string
 
 	// Extra options
-	Cwd                         string
+	WorkingDirectory            string
 	AttemptTimeout              time.Duration
 	TotalTimeout                time.Duration
 	ResetAttemptTimeoutOnOutput bool
@@ -113,9 +113,9 @@ func (c Spec) WithResetAttemptTimeoutOnOutput(enabled bool) Spec {
 	return c
 }
 
-// WithWD sets the working directory for the command
-func (c Spec) WithWD(cwd string) Spec {
-	c.Cwd = cwd
+// WithWorkingDirectory sets the working directory for the command
+func (c Spec) WithWorkingDirectory(wd string) Spec {
+	c.WorkingDirectory = wd
 	return c
 }
 
@@ -182,7 +182,7 @@ func (c Spec) WithAttemptTimeout(timeout time.Duration) Spec {
 
 func (c Spec) logBeforeRun() {
 	if c.Verbose {
-		slog.Info(fmt.Sprintf("%s$ %s %s\n", c.Cwd, c.App, strings.Join(c.Args, " ")))
+		slog.Info(fmt.Sprintf("%s$ %s %s\n", c.WorkingDirectory, c.App, strings.Join(c.Args, " ")))
 	}
 }
 
@@ -351,7 +351,7 @@ func (c Spec) withRetries(parentCtx context.Context, processor func(cmd *exec.Cm
 			}()
 
 			cmd := exec.CommandContext(attemptCtx, c.App, c.Args...)
-			cmd.Dir = c.Cwd
+			cmd.Dir = c.WorkingDirectory
 
 			return processor(cmd, aliveSignal)
 
