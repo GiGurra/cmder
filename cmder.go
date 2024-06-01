@@ -219,7 +219,7 @@ func (c Spec) Run(ctx context.Context) Result {
 		cmd.Stdin = c.StdIn
 
 		// create a writer that writes to buffer, but also sends a signal to reset the timeout
-		combinedWriter := util.NewResetWriterCh(combinedBuffer, aliveSignal)
+		combinedWriter := util.TapWriterToChan(combinedBuffer, aliveSignal)
 
 		if c.CollectAllOutput {
 			stdoutBuffer = &bytes.Buffer{}

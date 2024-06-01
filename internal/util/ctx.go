@@ -4,29 +4,23 @@ import (
 	"io"
 )
 
-type ResetFunc func()
-
-type ResetWriter interface {
-	io.Writer
+type _tapper struct {
+	w       io.Writer
+	tapFunc func()
 }
 
-type resetWriter struct {
-	w         io.Writer
-	resetFunc ResetFunc
-}
-
-func (rw resetWriter) Write(p []byte) (n int, err error) {
-	rw.resetFunc()
+func (rw _tapper) Write(p []byte) (n int, err error) {
+	rw.tapFunc()
 	return rw.w.Write(p)
 }
 
-func NewResetWriter(w io.Writer, resetFunc ResetFunc) ResetWriter {
-	return resetWriter{
-		w:         w,
-		resetFunc: resetFunc,
+func newTapper(w io.Writer, tapFunc func()) io.Writer {
+	return _tapper{
+		w:       w,
+		tapFunc: tapFunc,
 	}
 }
 
-func NewResetWriterCh(w io.Writer, resetChan chan any) ResetWriter {
-	return NewResetWriter(w, func() { resetChan <- struct{}{} })
+func TapWriterToChan(w io.Writer, tapChan chan any) io.Writer {
+	return newTapper(w, func() { tapChan <- struct{}{} })
 }
