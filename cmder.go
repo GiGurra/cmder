@@ -184,7 +184,7 @@ func (c Spec) WithStdErrForwarded() Spec {
 	return c
 }
 
-func (c Spec) Run(ctx context.Context) (Result, error) {
+func (c Spec) Run(ctx context.Context) Result {
 
 	stdoutBuffer := &bytes.Buffer{}
 	stderrBuffer := &bytes.Buffer{}
@@ -256,7 +256,7 @@ func (c Spec) Run(ctx context.Context) (Result, error) {
 		Err:      err,
 		Attempts: attempts,
 		ExitCode: exitCode,
-	}, err
+	}
 }
 
 func executeAfterDuration(ctx context.Context, duration time.Duration, task func()) {
