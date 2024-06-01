@@ -2,15 +2,17 @@ package util
 
 import (
 	"bytes"
+	"io"
 	"testing"
 )
 
 func TestTapWriterToChan(t *testing.T) {
 	sink := bytes.Buffer{}
 	tap := make(chan any, 10)
-	tapper := TapWriterToChan(&sink, tap)
+	obs := NewObserver(tap)
+	combined := io.MultiWriter(&sink, obs)
 
-	_, _ = tapper.Write([]byte("hello"))
+	_, _ = combined.Write([]byte("hello"))
 
 	if sink.String() != "hello" {
 		t.Error("Expected 'hello', got", sink.String())

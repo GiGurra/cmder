@@ -219,35 +219,29 @@ func (c Spec) Run(ctx context.Context) Result {
 		cmd.Stdin = c.StdIn
 
 		// create a writer that writes to buffer, but also sends a signal to reset the timeout
-		combinedWriter := util.TapWriterToChan(combinedBuffer, aliveSignal)
+		observer := util.NewObserver(aliveSignal)
+
+		stdOutTargets := []io.Writer{observer}
+		stdErrTargets := []io.Writer{observer}
 
 		if c.CollectAllOutput {
 			stdoutBuffer = &bytes.Buffer{}
 			stderrBuffer = &bytes.Buffer{}
 			combinedBuffer = &bytes.Buffer{}
-
-			if c.StdOut != nil {
-				cmd.Stdout = io.MultiWriter(c.StdOut, stdoutBuffer, combinedWriter)
-			} else {
-				cmd.Stdout = io.MultiWriter(stdoutBuffer, combinedWriter)
-			}
-			if c.StdErr != nil {
-				cmd.Stderr = io.MultiWriter(c.StdErr, stderrBuffer, combinedWriter)
-			} else {
-				cmd.Stderr = io.MultiWriter(stderrBuffer, combinedWriter)
-			}
-		} else {
-			if c.StdOut != nil {
-				cmd.Stdout = io.MultiWriter(c.StdOut, combinedWriter)
-			} else {
-				cmd.Stdout = combinedWriter
-			}
-			if c.StdErr != nil {
-				cmd.Stderr = io.MultiWriter(c.StdErr, combinedWriter)
-			} else {
-				cmd.Stderr = combinedWriter
-			}
+			stdOutTargets = append(stdOutTargets, stdoutBuffer, combinedBuffer)
+			stdErrTargets = append(stdErrTargets, stderrBuffer, combinedBuffer)
 		}
+
+		if c.StdOut != nil {
+			stdOutTargets = append(stdOutTargets, c.StdOut)
+		}
+
+		if c.StdErr != nil {
+			stdErrTargets = append(stdErrTargets, c.StdErr)
+		}
+
+		cmd.Stdout = io.MultiWriter(stdOutTargets...)
+		cmd.Stderr = io.MultiWriter(stdErrTargets...)
 
 		err := cmd.Run() // waits internally
 

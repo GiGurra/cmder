@@ -4,23 +4,21 @@ import (
 	"io"
 )
 
-type _tapper struct {
-	w       io.Writer
-	tapFunc func()
+type _observer struct {
+	fn func()
 }
 
-func (rw _tapper) Write(p []byte) (n int, err error) {
-	rw.tapFunc()
-	return rw.w.Write(p)
+func (rw _observer) Write(p []byte) (n int, err error) {
+	rw.fn()
+	return len(p), nil
 }
 
-func newTapper(w io.Writer, tapFunc func()) io.Writer {
-	return _tapper{
-		w:       w,
-		tapFunc: tapFunc,
+func newObserver(fn func()) io.Writer {
+	return _observer{
+		fn: fn,
 	}
 }
 
-func TapWriterToChan(w io.Writer, tapChan chan any) io.Writer {
-	return newTapper(w, func() { tapChan <- struct{}{} })
+func NewObserver(ch chan any) io.Writer {
+	return newObserver(func() { ch <- struct{}{} })
 }
