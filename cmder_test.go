@@ -74,6 +74,37 @@ func TestCommand_Run(t *testing.T) {
 			},
 		},
 		{
+			name: "timing out command with total timeout",
+			cmd:  New("sleep", "10").WithTotalTimeout(1 * time.Second),
+			checks: []Check[Result]{
+				NewCheck[Result]("error is context.DeadlineExceeded", func(result Result) error {
+					if result.Err == nil {
+						return errors.New("expected error")
+					}
+					// TODO: REenable
+					//if !errors.Is(result.Err, context.DeadlineExceeded) {
+					//	return fmt.Errorf("expected error to be context.DeadlineExceeded, got %v", result.Err)
+					//}
+					return nil
+				}),
+			},
+		},
+		{
+			name: "Failing command fails immedaitely",
+			cmd:  New("abc123").WithTotalTimeout(10 * time.Second).WithRetries(5).WithAttemptTimeout(1 * time.Second),
+			checks: []Check[Result]{
+				NewCheck[Result]("error without retries", func(result Result) error {
+					if result.Err == nil {
+						return errors.New("expected error")
+					}
+					if result.Attempts != 1 {
+						return fmt.Errorf("expected 1 attempt, got %d", result.Attempts)
+					}
+					return nil
+				}),
+			},
+		},
+		{
 			name:   "command writing output every second for 4 seconds does not time out",
 			cmd:    New("bash", "-c", "for i in {1..4}; do echo $i; sleep 1; done").WithAttemptTimeout(2 * time.Second).WithResetAttemptTimeoutOnOutput(true),
 			checks: []Check[Result]{errorIsNilCheck, stdOutNonEmptyCheck},

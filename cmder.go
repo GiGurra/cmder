@@ -259,6 +259,10 @@ func (c Spec) withRetries(srcCtx context.Context, recvSignal <-chan any, process
 		defer cancel() // os effectively called after processor(cmd)
 	}
 
+	// TODO: We have race conditions below. Need to rewrite timeout handling entirely. Should be a single WithTimeout, with its own context.
+	// When that context times out, we must check if we really want to time out given the overall external conditions (atomics!)
+	// So no more race conditions
+
 	for i := 0; i <= c.Retries; i++ {
 
 		ctx := ctx // needed so we don't cancel the parent context
@@ -275,6 +279,7 @@ func (c Spec) withRetries(srcCtx context.Context, recvSignal <-chan any, process
 					for {
 						select {
 						case <-ctx.Done():
+							time.Sleep(1 * time.Second)
 							isAttemptTimeout = true
 							return
 						case _, ok := <-recvSignal:
