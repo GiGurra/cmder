@@ -75,16 +75,15 @@ func TestCommand_Run(t *testing.T) {
 		},
 		{
 			name: "timing out command with total timeout",
-			cmd:  New("sleep", "10").WithTotalTimeout(1 * time.Second),
+			cmd:  New("sleep", "10").WithTotalTimeout(4 * time.Second),
 			checks: []Check[Result]{
 				NewCheck[Result]("error is context.DeadlineExceeded", func(result Result) error {
 					if result.Err == nil {
 						return errors.New("expected error")
 					}
-					// TODO: REenable
-					//if !errors.Is(result.Err, context.DeadlineExceeded) {
-					//	return fmt.Errorf("expected error to be context.DeadlineExceeded, got %v", result.Err)
-					//}
+					if !errors.Is(result.Err, context.DeadlineExceeded) {
+						return fmt.Errorf("expected error to be context.DeadlineExceeded, got %v", result.Err)
+					}
 					return nil
 				}),
 			},

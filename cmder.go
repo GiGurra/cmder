@@ -245,11 +245,13 @@ func (c Spec) Run(ctx context.Context) (Result, error) {
 }
 
 func executeAfterDuration(ctx context.Context, duration time.Duration, task func()) {
-	select {
-	case <-time.After(duration):
-		task()
-	case <-ctx.Done():
-	}
+	go func() {
+		select {
+		case <-time.After(duration):
+			task()
+		case <-ctx.Done():
+		}
+	}()
 }
 
 func toPtr[T any](x T) *T {
@@ -286,17 +288,21 @@ func (c Spec) withRetries(parentCtx context.Context, processor func(cmd *exec.Cm
 			attemptCtx, cancelAttemptCtx := context.WithCancel(jobCtx)
 			defer cancelAttemptCtx()
 
-			executeAfterDuration(attemptCtx, c.AttemptTimeout, func() {
-				curDeadline := attemptDeadline.Load()
-				if time.Now().After(*curDeadline) {
-					attemptTimedOut.Store(true)
-					cancelAttemptCtx()
-				} else {
-					executeAfterDuration(attemptCtx, curDeadline.Sub(time.Now())+1*time.Millisecond, func() {
+			if c.AttemptTimeout > 0 {
+				var checkTimeoutFunc func()
+				checkTimeoutFunc = func() {
+					curDeadline := attemptDeadline.Load()
+					if time.Now().After(*curDeadline) {
+						attemptTimedOut.Store(true)
 						cancelAttemptCtx()
-					})
+					} else {
+						executeAfterDuration(attemptCtx, curDeadline.Sub(time.Now())+1*time.Millisecond, func() {
+							checkTimeoutFunc()
+						})
+					}
 				}
-			})
+				checkTimeoutFunc()
+			}
 
 			go func() {
 				for {
