@@ -78,7 +78,6 @@ The `Spec` struct defines the command specification and options:
 
 The `Spec` struct provides the following builder methods to configure the command:
 
-- `New(appAndArgs ...string) Spec`: Create a new command specification.
 - `WithTotalTimeout(timeout time.Duration) Spec`: Set total timeout.
 - `WithStdOut(writer io.Writer) Spec`: Set standard output writer.
 - `WithStdErr(writer io.Writer) Spec`: Set standard error writer.
