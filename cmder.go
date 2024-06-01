@@ -29,9 +29,10 @@ type Spec struct {
 	RetryFilter                 func(err error, isTimeout bool) bool
 
 	// Input/Output
-	StdIn  io.Reader
-	StdOut io.Writer // if capturing output while running
-	StdErr io.Writer // if capturing output while running
+	StdIn            io.Reader
+	StdOut           io.Writer // if capturing output while running
+	StdErr           io.Writer // if capturing output while running
+	CollectAllOutput bool      // if running for a very long time, set this false to avoid OOM
 
 	// debug functionality
 	Verbose bool
@@ -49,7 +50,8 @@ type Result struct {
 func New(appAndArgs ...string) Spec {
 
 	result := Spec{
-		RetryFilter: DefaultRetryFilter,
+		RetryFilter:      DefaultRetryFilter,
+		CollectAllOutput: true,
 	}
 
 	if len(appAndArgs) > 0 {
@@ -76,17 +78,10 @@ func DefaultRetryFilter(err error, isTimeout bool) bool {
 func TimeoutRetryFilter(err error, isTimeout bool) bool {
 
 	if errors.Is(err, context.DeadlineExceeded) {
-		slog.Warn("timeout (go context.DeadlineExceeded) running command")
-		return true
-	}
-
-	if strings.Contains(err.Error(), "context deadline exceeded") {
-		slog.Warn("timeout ('context deadline exceeded') running command")
 		return true
 	}
 
 	if isTimeout {
-		slog.Warn("timeout running command")
 		return true
 	}
 
@@ -108,6 +103,12 @@ func (c Spec) WithResetAttemptTimeoutOnOutput(enabled bool) Spec {
 // WithWD sets the working directory for the command
 func (c Spec) WithWD(cwd string) Spec {
 	c.Cwd = cwd
+	return c
+}
+
+// WithCollectAllOutput sets whether to collect all output. Default is true. If false, you need to inject your own io.Writer
+func (c Spec) WithCollectAllOutput(collect bool) Spec {
+	c.CollectAllOutput = collect
 	return c
 }
 
@@ -163,9 +164,9 @@ func (c Spec) WithAttemptTimeout(timeout time.Duration) Spec {
 func (c Spec) logBeforeRun() {
 	if c.Verbose {
 		if c.App == "sh" && len(c.Args) > 0 && c.Args[0] == "-c" {
-			fmt.Printf("%s$ %s\n", c.Cwd, strings.Join(c.Args[1:], " "))
+			slog.Info(fmt.Sprintf("%s$ %s\n", c.Cwd, strings.Join(c.Args[1:], " ")))
 		} else {
-			fmt.Printf("%s$ %s %s\n", c.Cwd, c.App, strings.Join(c.Args, " "))
+			slog.Info(fmt.Sprintf("%s$ %s %s\n", c.Cwd, c.App, strings.Join(c.Args, " ")))
 		}
 	}
 }
@@ -201,22 +202,37 @@ func (c Spec) Run(ctx context.Context) (Result, error) {
 
 		// Reset these each time, because they could internally
 		attempts++
-		stdoutBuffer = &bytes.Buffer{}
-		stderrBuffer = &bytes.Buffer{}
-		combinedBuffer = &bytes.Buffer{}
+		cmd.Stdin = c.StdIn
+
 		// create a writer that writes to buffer, but also sends a signal to reset the timeout
 		combinedWriter := util_ctx.NewResetWriterCh(combinedBuffer, resetChan)
 
-		cmd.Stdin = c.StdIn
-		if c.StdOut != nil {
-			cmd.Stdout = io.MultiWriter(c.StdOut, stdoutBuffer, combinedWriter)
+		if c.CollectAllOutput {
+			stdoutBuffer = &bytes.Buffer{}
+			stderrBuffer = &bytes.Buffer{}
+			combinedBuffer = &bytes.Buffer{}
+
+			if c.StdOut != nil {
+				cmd.Stdout = io.MultiWriter(c.StdOut, stdoutBuffer, combinedWriter)
+			} else {
+				cmd.Stdout = io.MultiWriter(stdoutBuffer, combinedWriter)
+			}
+			if c.StdErr != nil {
+				cmd.Stderr = io.MultiWriter(c.StdErr, stderrBuffer, combinedWriter)
+			} else {
+				cmd.Stderr = io.MultiWriter(stderrBuffer, combinedWriter)
+			}
 		} else {
-			cmd.Stdout = io.MultiWriter(stdoutBuffer, combinedWriter)
-		}
-		if c.StdErr != nil {
-			cmd.Stderr = io.MultiWriter(c.StdErr, stderrBuffer, combinedWriter)
-		} else {
-			cmd.Stderr = io.MultiWriter(stderrBuffer, combinedWriter)
+			if c.StdOut != nil {
+				cmd.Stdout = io.MultiWriter(c.StdOut, combinedWriter)
+			} else {
+				cmd.Stdout = combinedWriter
+			}
+			if c.StdErr != nil {
+				cmd.Stderr = io.MultiWriter(c.StdErr, combinedWriter)
+			} else {
+				cmd.Stderr = combinedWriter
+			}
 		}
 
 		return cmd.Run()
@@ -300,7 +316,9 @@ func (c Spec) withRetries(srcCtx context.Context, recvSignal <-chan any, process
 		if err != nil {
 
 			if c.RetryFilter(err, isTimeout) {
-				slog.Warn(fmt.Sprintf("retrying %s, attempt %d/%d \n", c.App, i+1, c.Retries+1))
+				if c.Verbose {
+					slog.Warn(fmt.Sprintf("retrying %s, attempt %d/%d \n", c.App, i+1, c.Retries+1))
+				}
 				continue
 			} else {
 				return fmt.Errorf("error running cmd %s \n %s: %w", c.App, err.Error(), err)
