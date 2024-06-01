@@ -131,7 +131,7 @@ func TestCommand_Run(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cmdResult, _ := tt.cmd.Run(context.Background())
+			cmdResult := tt.cmd.Run(context.Background())
 
 			for _, check := range tt.checks {
 				fmt.Printf(" - Running check '%v'...", check.Name())
