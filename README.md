@@ -76,7 +76,7 @@ The `Spec` struct defines the command specification and options:
 - `CollectAllOutput`: Whether to collect all output.
 - `Verbose`: Enable verbose logging.
 
-The `Spec` struct provides the following methods to configure the command:
+The `Spec` struct provides the following builder methods to configure the command:
 
 - `New(appAndArgs ...string) Spec`: Create a new command specification.
 - `WithTotalTimeout(timeout time.Duration) Spec`: Set total timeout.
