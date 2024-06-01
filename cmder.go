@@ -358,5 +358,5 @@ func (c Spec) withRetries(parentCtx context.Context, processor func(cmd *exec.Cm
 
 	}
 
-	return fmt.Errorf("error running cmd %s \n %s: %w", c.App, "timeout", context.DeadlineExceeded)
+	return fmt.Errorf("error running cmd %s \n %s: %w", c.App, "timeout and max retries exceeded", context.DeadlineExceeded)
 }
