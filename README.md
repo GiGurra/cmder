@@ -56,9 +56,9 @@ func main() {
 
 ### Spec
 
-Every command is defined by a `Spec` struct, which contains the command specification and options. The `Spec` struct
-provides methods to configure the command, such as setting the application to run, arguments, timeouts, retries, and
-output handling.
+Every command is defined by a `Spec` struct (created by `cmder.New(..)`), which contains the command specification and
+options. The `Spec` struct provides methods to configure the command, such as setting the application to run, arguments,
+timeouts, retries, and output handling.
 
 The `Spec` struct defines the command specification and options:
 
