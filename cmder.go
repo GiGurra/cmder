@@ -26,7 +26,7 @@ type Spec struct {
 	TotalTimeout                time.Duration
 	ResetAttemptTimeoutOnOutput bool
 	Retries                     int
-	RetryFilter                 func(err error, isTimeout bool) bool
+	RetryFilter                 func(err error, isAttemptTimeout bool) bool
 
 	// Input/Output
 	StdIn            io.Reader
@@ -70,18 +70,18 @@ func NewA(app string, args ...string) Spec {
 	return New(append([]string{app}, args...)...)
 }
 
-func DefaultRetryFilter(err error, isTimeout bool) bool {
-	return TimeoutRetryFilter(err, isTimeout)
+func DefaultRetryFilter(err error, isAttemptTimeout bool) bool {
+	return TimeoutRetryFilter(err, isAttemptTimeout)
 }
 
 // TimeoutRetryFilter is a simple retry policy that retries on timeouts only
-func TimeoutRetryFilter(err error, isTimeout bool) bool {
+func TimeoutRetryFilter(err error, isAttemptTimeout bool) bool {
 
 	if errors.Is(err, context.DeadlineExceeded) {
 		return true
 	}
 
-	if isTimeout {
+	if isAttemptTimeout {
 		return true
 	}
 
@@ -137,7 +137,7 @@ func (c Spec) WithExtraArgs(extraArgs ...string) Spec {
 }
 
 // WithRetryFilter sets the retry filter
-func (c Spec) WithRetryFilter(filter func(err error, isTimeout bool) bool) Spec {
+func (c Spec) WithRetryFilter(filter func(err error, isAttemptTimeout bool) bool) Spec {
 	c.RetryFilter = filter
 	return c
 }
@@ -268,7 +268,7 @@ func (c Spec) withRetries(srcCtx context.Context, recvSignal <-chan any, process
 		ctx := ctx // needed so we don't cancel the parent context
 
 		// Every retry needs its own timeout context
-		isTimeout := false
+		isAttemptTimeout := false
 		err := func() error {
 			if c.AttemptTimeout > 0 {
 				var cancel context.CancelFunc
@@ -279,7 +279,7 @@ func (c Spec) withRetries(srcCtx context.Context, recvSignal <-chan any, process
 					for {
 						select {
 						case <-ctx.Done():
-							isTimeout = true
+							isAttemptTimeout = true
 							return
 						case _, ok := <-recvSignal:
 							if !ok {
@@ -315,7 +315,7 @@ func (c Spec) withRetries(srcCtx context.Context, recvSignal <-chan any, process
 
 		if err != nil {
 
-			if c.RetryFilter(err, isTimeout) {
+			if c.RetryFilter(err, isAttemptTimeout) {
 				if c.Verbose {
 					slog.Warn(fmt.Sprintf("retrying %s, attempt %d/%d \n", c.App, i+1, c.Retries+1))
 				}
