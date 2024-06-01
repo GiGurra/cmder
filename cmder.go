@@ -131,6 +131,12 @@ func (c Spec) WithStdIn(reader io.Reader) Spec {
 	return c
 }
 
+// WithStdInForwarded sets the standard input to os.Stdin
+func (c Spec) WithStdInForwarded() Spec {
+	c.StdIn = os.Stdin
+	return c
+}
+
 // WithApp sets the application to run
 func (c Spec) WithApp(app string) Spec {
 	c.App = app
