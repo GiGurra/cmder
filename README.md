@@ -37,12 +37,11 @@ import (
 )
 
 func main() {
-	cmd := cmder.New("ls", "-la").
+	result := cmder.New("ls", "-la").
 		WithAttemptTimeout(5 * time.Second).
 		WithRetries(3).
-		WithVerbose(true)
-
-	result := cmd.Run(context.Background())
+		WithVerbose(true).
+		Run(context.Background())
 
 	if result.Err != nil {
 		fmt.Printf("Command failed: %v\n", result.Err)
@@ -50,6 +49,7 @@ func main() {
 		fmt.Printf("Command succeeded: %s\n", result.StdOut)
 	}
 }
+
 ```
 
 ## API
