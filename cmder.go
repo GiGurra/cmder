@@ -45,7 +45,7 @@ type Result struct {
 	Combined string
 	Err      error
 	Attempts int
-	Code     int
+	ExitCode int
 }
 
 func New(appAndArgs ...string) Spec {
@@ -190,8 +190,11 @@ func (c Spec) Run(ctx context.Context) (Result, error) {
 	stderrBuffer := &bytes.Buffer{}
 	combinedBuffer := &bytes.Buffer{}
 	attempts := 0
+	exitCode := 0
 
 	err := c.withRetries(ctx, func(cmd *exec.Cmd, aliveSignal chan any) error {
+
+		exitCode = 0
 
 		// Reset these each time, because they could internally
 		attempts++
@@ -228,7 +231,18 @@ func (c Spec) Run(ctx context.Context) (Result, error) {
 			}
 		}
 
-		return cmd.Run()
+		err := cmd.Run() // waits internally
+
+		if err != nil {
+			if cmd.ProcessState != nil {
+				exitCode = cmd.ProcessState.ExitCode()
+			} else {
+				exitCode = -1
+			}
+		}
+
+		return err
+
 	})
 
 	stdout := stdoutBuffer.String()
@@ -241,6 +255,7 @@ func (c Spec) Run(ctx context.Context) (Result, error) {
 		Combined: combined,
 		Err:      err,
 		Attempts: attempts,
+		ExitCode: exitCode,
 	}, err
 }
 

@@ -47,6 +47,13 @@ var stdOutNonEmptyCheck = NewCheck[Result]("StdOut not empty", func(result Resul
 	return nil
 })
 
+var zeroExitCode = NewCheck[Result]("exit code is zero", func(result Result) error {
+	if result.ExitCode != 0 {
+		return fmt.Errorf("expected exit code 0, got %d", result.ExitCode)
+	}
+	return nil
+})
+
 func TestCommand_Run(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -56,7 +63,7 @@ func TestCommand_Run(t *testing.T) {
 		{
 			name:   "simple ls command",
 			cmd:    New("ls", "-la").WithAttemptTimeout(5 * time.Second),
-			checks: []Check[Result]{errorIsNilCheck, stdOutNonEmptyCheck},
+			checks: []Check[Result]{errorIsNilCheck, stdOutNonEmptyCheck, zeroExitCode},
 		},
 		{
 			name: "timing out command",
@@ -68,6 +75,9 @@ func TestCommand_Run(t *testing.T) {
 					}
 					if !errors.Is(result.Err, context.DeadlineExceeded) {
 						return fmt.Errorf("expected error to be context.DeadlineExceeded, got %v", result.Err)
+					}
+					if result.ExitCode == 0 {
+						return errors.New("expected non-zero exit code")
 					}
 					return nil
 				}),
@@ -83,6 +93,9 @@ func TestCommand_Run(t *testing.T) {
 					}
 					if !errors.Is(result.Err, context.DeadlineExceeded) {
 						return fmt.Errorf("expected error to be context.DeadlineExceeded, got %v", result.Err)
+					}
+					if result.ExitCode == 0 {
+						return errors.New("expected non-zero exit code")
 					}
 					return nil
 				}),
@@ -102,6 +115,9 @@ func TestCommand_Run(t *testing.T) {
 					if result.Attempts != 1 {
 						return fmt.Errorf("expected 1 attempt, got %d", result.Attempts)
 					}
+					if result.ExitCode == 0 {
+						return errors.New("expected non-zero exit code")
+					}
 					return nil
 				}),
 			},
@@ -109,7 +125,7 @@ func TestCommand_Run(t *testing.T) {
 		{
 			name:   "command writing output every second for 4 seconds does not time out",
 			cmd:    New("bash", "-c", "for i in {1..4}; do echo $i; sleep 1; done").WithAttemptTimeout(2 * time.Second).WithResetAttemptTimeoutOnOutput(true),
-			checks: []Check[Result]{errorIsNilCheck, stdOutNonEmptyCheck},
+			checks: []Check[Result]{errorIsNilCheck, stdOutNonEmptyCheck, zeroExitCode},
 		},
 	}
 
