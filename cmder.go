@@ -163,11 +163,7 @@ func (c Spec) WithAttemptTimeout(timeout time.Duration) Spec {
 
 func (c Spec) logBeforeRun() {
 	if c.Verbose {
-		if c.App == "sh" && len(c.Args) > 0 && c.Args[0] == "-c" {
-			slog.Info(fmt.Sprintf("%s$ %s\n", c.Cwd, strings.Join(c.Args[1:], " ")))
-		} else {
-			slog.Info(fmt.Sprintf("%s$ %s %s\n", c.Cwd, c.App, strings.Join(c.Args, " ")))
-		}
+		slog.Info(fmt.Sprintf("%s$ %s %s\n", c.Cwd, c.App, strings.Join(c.Args, " ")))
 	}
 }
 
