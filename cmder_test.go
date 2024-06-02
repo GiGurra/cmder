@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -64,9 +65,10 @@ var zeroExitCode = NewCheck[Result]("exit code is zero", func(result Result) err
 
 func TestCommand_Run(t *testing.T) {
 	tests := []struct {
-		name   string
-		cmd    Spec
-		checks []Check[Result]
+		name     string
+		cmd      Spec
+		checks   []Check[Result]
+		unixOnly bool
 	}{
 		{
 			name:   "simple ls command",
@@ -86,6 +88,7 @@ func TestCommand_Run(t *testing.T) {
 				}),
 				zeroExitCode,
 			},
+			unixOnly: true,
 		},
 		{
 			name: "command with standard input",
@@ -238,7 +241,13 @@ func TestCommand_Run(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+
 		t.Run(tt.name, func(t *testing.T) {
+
+			if tt.unixOnly && isWindows() {
+				t.Skip("Test is Unix only")
+			}
+
 			cmdResult := tt.cmd.Run(context.Background())
 
 			for _, check := range tt.checks {
@@ -250,4 +259,8 @@ func TestCommand_Run(t *testing.T) {
 			}
 		})
 	}
+}
+
+func isWindows() bool {
+	return runtime.GOOS == "windows"
 }
