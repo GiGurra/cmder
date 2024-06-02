@@ -1,7 +1,7 @@
 # cmder
 
-`cmder` is a Go package designed to facilitate the execution of external commands with advanced features such as
-retries, timeouts, and output collection. It provides a flexible and robust way to run commands, handle their
+`cmder` is a Go package designed to facilitate the execution of external commands with features such as
+retries, timeouts, and output collection. It provides a flexible way to run commands, handle their
 input/output, and manage their execution lifecycle.
 
 ## Features
