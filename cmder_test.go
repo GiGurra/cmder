@@ -63,6 +63,13 @@ var zeroExitCode = NewCheck[Result]("exit code is zero", func(result Result) err
 	return nil
 })
 
+var ls = func() string {
+	if isWindows() {
+		return "dir"
+	}
+	return "ls"
+}()
+
 func TestCommand_Run(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -72,7 +79,7 @@ func TestCommand_Run(t *testing.T) {
 	}{
 		{
 			name:   "simple ls command",
-			cmd:    New("ls", "-la").WithAttemptTimeout(5 * time.Second),
+			cmd:    New(ls).WithAttemptTimeout(5 * time.Second),
 			checks: []Check[Result]{errorIsNilCheck, stdOutNonEmptyCheck, zeroExitCode},
 		},
 		{
@@ -103,6 +110,7 @@ func TestCommand_Run(t *testing.T) {
 				}),
 				zeroExitCode,
 			},
+			unixOnly: true,
 		},
 		{
 			name: "command with custom retry filter",
