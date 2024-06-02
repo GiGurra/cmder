@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 )
@@ -47,6 +48,13 @@ var stdOutNonEmptyCheck = NewCheck[Result]("StdOut not empty", func(result Resul
 	return nil
 })
 
+var stdOutEmptyCheck = NewCheck[Result]("StdOut not empty", func(result Result) error {
+	if result.StdOut != "" {
+		return errors.New("non-nempty StdOut")
+	}
+	return nil
+})
+
 var zeroExitCode = NewCheck[Result]("exit code is zero", func(result Result) error {
 	if result.ExitCode != 0 {
 		return fmt.Errorf("expected exit code 0, got %d", result.ExitCode)
@@ -64,6 +72,106 @@ func TestCommand_Run(t *testing.T) {
 			name:   "simple ls command",
 			cmd:    New("ls", "-la").WithAttemptTimeout(5 * time.Second),
 			checks: []Check[Result]{errorIsNilCheck, stdOutNonEmptyCheck, zeroExitCode},
+		},
+		{
+			name: "command with different working directory",
+			cmd:  New("pwd").WithWorkingDirectory("/tmp").WithAttemptTimeout(5 * time.Second),
+			checks: []Check[Result]{
+				errorIsNilCheck,
+				NewCheck[Result]("StdOut contains /tmp", func(result Result) error {
+					if !strings.Contains(result.StdOut, "/tmp") {
+						return fmt.Errorf("expected StdOut to contain /tmp, got %v", result.StdOut)
+					}
+					return nil
+				}),
+				zeroExitCode,
+			},
+		},
+		{
+			name: "command with standard input",
+			cmd:  New("cat").WithStdIn(strings.NewReader("hello world")).WithAttemptTimeout(5 * time.Second),
+			checks: []Check[Result]{
+				errorIsNilCheck,
+				NewCheck[Result]("StdOut contains hello world", func(result Result) error {
+					if !strings.Contains(result.StdOut, "hello world") {
+						return fmt.Errorf("expected StdOut to contain 'hello world', got %v", result.StdOut)
+					}
+					return nil
+				}),
+				zeroExitCode,
+			},
+		},
+		{
+			name: "command with custom retry filter",
+			cmd: New("false").WithRetries(3).WithRetryFilter(func(err error, isAttemptTimeout bool) bool {
+				return true // Always retry
+			}).WithAttemptTimeout(1 * time.Second),
+			checks: []Check[Result]{
+				NewCheck[Result]("retries 3 times", func(result Result) error {
+					if result.Attempts != 4 { // 1 initial + 3 retries
+						return fmt.Errorf("expected 4 attempts, got %d", result.Attempts)
+					}
+					return nil
+				}),
+			},
+		},
+		{
+			name: "command with verbose logging",
+			cmd:  New("echo", "verbose test").WithVerbose(true).WithAttemptTimeout(5 * time.Second),
+			checks: []Check[Result]{
+				errorIsNilCheck,
+				stdOutNonEmptyCheck,
+				zeroExitCode,
+			},
+		},
+		{
+			name: "command with CollectAllOutput disabled",
+			cmd:  New("echo", "test").WithCollectAllOutput(false).WithAttemptTimeout(5 * time.Second),
+			checks: []Check[Result]{
+				errorIsNilCheck,
+				zeroExitCode,
+				stdOutEmptyCheck,
+			},
+		},
+		{
+			name: "command with StdOut and StdErr forwarded",
+			cmd:  New("echo", "forward test").WithStdOutErrForwarded().WithAttemptTimeout(5 * time.Second),
+			checks: []Check[Result]{
+				errorIsNilCheck,
+				zeroExitCode,
+			},
+		},
+		{
+			name: "command with different retry counts",
+			cmd: New("false").WithRetries(2).WithAttemptTimeout(1 * time.Second).WithRetryFilter(func(err error, isAttemptTimeout bool) bool {
+				return true // Always retry
+			}),
+			checks: []Check[Result]{
+				NewCheck[Result]("retries 2 times", func(result Result) error {
+					if result.Attempts != 3 { // 1 initial + 2 retries
+						return fmt.Errorf("expected 3 attempts, got %d", result.Attempts)
+					}
+					return nil
+				}),
+			},
+		},
+		{
+			name: "command with different timeout configurations",
+			cmd:  New("sleep", "2").WithAttemptTimeout(1 * time.Second).WithTotalTimeout(3 * time.Second),
+			checks: []Check[Result]{
+				NewCheck[Result]("error is context.DeadlineExceeded", func(result Result) error {
+					if result.Err == nil {
+						return errors.New("expected error")
+					}
+					if !errors.Is(result.Err, context.DeadlineExceeded) {
+						return fmt.Errorf("expected error to be context.DeadlineExceeded, got %v", result.Err)
+					}
+					if result.ExitCode == 0 {
+						return errors.New("expected non-zero exit code")
+					}
+					return nil
+				}),
+			},
 		},
 		{
 			name: "timing out command",
