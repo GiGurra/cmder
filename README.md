@@ -106,6 +106,8 @@ The package includes tests to verify its functionality. To run the tests, use:
 go test ./...
 ```
 
+note: The tests don't work on windows.
+
 ## License
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
