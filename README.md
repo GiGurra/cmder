@@ -4,16 +4,6 @@
 retries, timeouts, and output collection. It provides a flexible way to run commands, handle their
 input/output, and manage their execution lifecycle.
 
-## Features
-
-- **Command Execution**: Run external commands with specified arguments.
-- **Timeouts**: Set timeouts for individual attempts and total execution time.
-- **Retries**: Retry commands on failure with customizable retry policies.
-- **Output Handling**: Capture and manage standard output and error streams.
-- **Verbose Logging**: Enable detailed logging for debugging purposes.
-- **Working Directory**: Specify the working directory for the command execution.
-- **Input Forwarding**: Forward standard input to the command.
-
 ## Installation
 
 To install the package, use:
