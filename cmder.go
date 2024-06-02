@@ -125,6 +125,13 @@ func (c Spec) WithCollectAllOutput(collect bool) Spec {
 	return c
 }
 
+// WithCmd sets the application and arguments for the command
+func (c Spec) WithCmd(app string, args ...string) Spec {
+	c.App = app
+	c.Args = args
+	return c
+}
+
 // WithStdIn sets the standard input for the command
 func (c Spec) WithStdIn(reader io.Reader) Spec {
 	c.StdIn = reader
