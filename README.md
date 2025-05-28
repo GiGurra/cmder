@@ -1,5 +1,8 @@
 # cmder
 
+[![CI Status](https://github.com/GiGurra/cmder/actions/workflows/ci.yml/badge.svg)](https://github.com/GiGurra/cmder/actions/workflows/ci.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/GiGurra/cmder)](https://goreportcard.com/report/github.com/GiGurra/cmder)
+
 `cmder` is a Go package designed to facilitate the execution of external commands with features such as
 retries, timeouts, and output collection. It provides a flexible way to run commands, handle their
 input/output, and manage their execution lifecycle.
