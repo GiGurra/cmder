@@ -1,0 +1,51 @@
+site_name: cmder
+site_url: https://gigurra.github.io/cmder/
+site_description: Go package for executing external commands with retries, timeouts, and output collection
+
+repo_name: GiGurra/cmder
+repo_url: https://github.com/GiGurra/cmder
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: teal
+      accent: cyan
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: teal
+      accent: cyan
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - content.code.copy
+    - content.code.annotate
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.inlinehilite
+  - admonition
+  - pymdownx.details
+  - tables
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Guide:
+      - Getting Started: guide/getting-started.md
+      - Timeouts: guide/timeouts.md
+      - Retries: guide/retries.md
+      - Output Handling: guide/output.md
+  - API:
+      - Spec: api/spec.md
+      - Result: api/result.md
+  - Design:
+      - Architecture: design/architecture.md

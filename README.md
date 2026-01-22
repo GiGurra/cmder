@@ -2,123 +2,92 @@
 
 [![CI Status](https://github.com/GiGurra/cmder/actions/workflows/ci.yml/badge.svg)](https://github.com/GiGurra/cmder/actions/workflows/ci.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/GiGurra/cmder)](https://goreportcard.com/report/github.com/GiGurra/cmder)
+[![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://gigurra.github.io/cmder/)
 
-`cmder` is a Go package designed to facilitate the execution of external commands with features such as
-retries, timeouts, and output collection. It provides a flexible way to run commands, handle their
-input/output, and manage their execution lifecycle.
+Go package for executing external commands with retries, timeouts, and output collection.
+
+## Features
+
+- **Attempt timeouts** - Kill commands that run too long
+- **Total timeouts** - Limit total time including retries
+- **Automatic retries** - Retry on timeout with configurable filters
+- **Output collection** - Capture stdout, stderr, and combined output
+- **Reset timeout on output** - Keep alive commands that produce output
+- **Fluent API** - Builder pattern for clean configuration
 
 ## Installation
 
-To install the package, use:
-
-```sh
+```bash
 go get github.com/GiGurra/cmder
 ```
 
-## Usage
-
-Here's a basic example of how to use `cmder` to run a command:
+## Quick Start
 
 ```go
-package main
+result := cmder.New("ls", "-la").
+    WithAttemptTimeout(5 * time.Second).
+    WithRetries(3).
+    Run(context.Background())
 
-import (
-	"context"
-	"fmt"
-	"github.com/GiGurra/cmder"
-	"time"
-)
-
-func main() {
-	result := cmder.New("ls", "-la").
-		WithAttemptTimeout(5 * time.Second).
-		WithRetries(3).
-		WithVerbose(true).
-		Run(context.Background())
-
-	if result.Err != nil {
-		fmt.Printf("Command failed: %v\n", result.Err)
-	} else {
-		fmt.Printf("Command succeeded: %s\n", result.StdOut)
-	}
+if result.Err != nil {
+    fmt.Printf("Failed: %v\n", result.Err)
+} else {
+    fmt.Printf("Output: %s\n", result.StdOut)
 }
+```
 
+## Common Patterns
+
+### Command with timeout
+
+```go
+result := cmder.New("slow-command").
+    WithAttemptTimeout(30 * time.Second).
+    Run(ctx)
+```
+
+### Retry on failure
+
+```go
+result := cmder.New("flaky-service").
+    WithRetries(5).
+    WithAttemptTimeout(10 * time.Second).
+    Run(ctx)
+```
+
+### Keep alive on output
+
+```go
+// Timeout resets each time command produces output
+result := cmder.New("long-running-task").
+    WithAttemptTimeout(5 * time.Second).
+    WithResetAttemptTimeoutOnOutput(true).
+    Run(ctx)
+```
+
+### Stream output while running
+
+```go
+result := cmder.New("build-script").
+    WithStdOutErrForwarded().  // Print to terminal
+    Run(ctx)
+```
+
+### Custom retry logic
+
+```go
+result := cmder.New("api-call").
+    WithRetries(3).
+    WithRetryFilter(func(err error, isTimeout bool) bool {
+        return isTimeout  // Only retry timeouts
+    }).
+    Run(ctx)
 ```
 
 ## API
 
-### Spec
-
-Every command is defined by a `Spec` struct (created by `cmder.New(..)`), which contains the command specification and
-options. The `Spec` struct provides methods to configure the command, such as setting the application to run, arguments,
-timeouts, retries, and output handling.
-
-The `Spec` struct defines the command specification and options:
-
-- `App`: The application to run.
-- `Args`: Arguments for the command.
-- `WorkingDirectory`: The working directory for the command.
-- `AttemptTimeout`: Timeout for each attempt.
-- `TotalTimeout`: Total timeout including retries.
-- `ResetAttemptTimeoutOnOutput`: Reset attempt timeout on output.
-- `Retries`: Number of retries before giving up.
-- `RetryFilter`: Custom retry filter function.
-- `StdIn`: Standard input for the command.
-- `StdOut`: Standard output for the command.
-- `StdErr`: Standard error for the command.
-- `CollectAllOutput`: Whether to collect all output.
-- `Verbose`: Enable verbose logging.
-
-The `Spec` struct provides the following builder methods to configure the command:
-
-- `WithTotalTimeout(timeout time.Duration) Spec`: Set total timeout.
-- `WithStdOut(writer io.Writer) Spec`: Set standard output writer.
-- `WithStdErr(writer io.Writer) Spec`: Set standard error writer.
-- `WithResetAttemptTimeoutOnOutput(enabled bool) Spec`: Enable/disable resetting attempt timeout on output.
-- `WithWorkingDirectory(wd string) Spec`: Set working directory.
-- `WithCollectAllOutput(collect bool) Spec`: Enable/disable collecting all output.
-- `WithStdIn(reader io.Reader) Spec`: Set standard input reader.
-- `WithApp(app string) Spec`: Set application to run.
-- `WithArgs(newArgs ...string) Spec`: Set command arguments.
-- `WithExtraArgs(extraArgs ...string) Spec`: Append extra arguments.
-- `WithRetryFilter(filter func(err error, isAttemptTimeout bool) bool) Spec`: Set retry filter.
-- `WithRetries(n int) Spec`: Set number of retries.
-- `WithVerbose(verbose bool) Spec`: Enable/disable verbose logging.
-- `WithAttemptTimeout(timeout time.Duration) Spec`: Set attempt timeout.
-- `Run(ctx context.Context) Result`: Run the command and return the result.
-
-Each method returns a new `Spec` instance, allowing for method chaining to configure the command. You can also create
-general templates that you re-use across multiple commands and modules of your program.
-
-### Result
-
-The `Result` struct contains the result of the command execution:
-
-- `StdOut`: Captured standard output.
-- `StdErr`: Captured standard error.
-- `Combined`: Combined output of standard output and error.
-- `Err`: Error encountered during execution.
-- `Attempts`: Number of attempts made.
-- `ExitCode`: Exit code of the command.
-
-## Testing
-
-The package includes tests to verify its functionality. To run the tests, use:
-
-```sh
-go test ./...
-```
-
-note: The tests don't work on windows.
+See the [API documentation](https://gigurra.github.io/cmder/api/spec/) for full details.
 
 ## License
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
-
-## Contributing
-
-Contributions are welcome! Please open an issue or submit a pull request for any improvements or bug fixes.
-
----
-
-For more details, refer to the source code and comments within the package.
+MIT
